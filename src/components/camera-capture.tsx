@@ -27,10 +27,13 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     })
   }, [])
 
-  // 解像度を指定しないことで、デバイスが自動的に
-  // 縦向き/横向きに応じた適切な映像を選択する
+  // idealに縦横同じ高い値を指定することで:
+  // 1. 高解像度を要求（デバイスの最大解像度に近づける）
+  // 2. 特定のアスペクト比を強制しない（縦/横はデバイスが自動判断）
   const videoConstraints: MediaTrackConstraints = {
     facingMode,
+    width: { ideal: 4096 },
+    height: { ideal: 4096 },
   }
 
   const handleCapture = () => {
