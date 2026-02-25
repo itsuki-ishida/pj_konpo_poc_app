@@ -27,13 +27,11 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     })
   }, [])
 
-  // idealに縦横同じ高い値を指定することで:
-  // 1. 高解像度を要求（デバイスの最大解像度に近づける）
-  // 2. 特定のアスペクト比を強制しない（縦/横はデバイスが自動判断）
-  const videoConstraints: MediaTrackConstraints = {
+  // 初期コードと同じ設定（動作確認済み）
+  const videoConstraints = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
     facingMode,
-    width: { ideal: 4096 },
-    height: { ideal: 4096 },
   }
 
   const handleCapture = () => {
@@ -60,9 +58,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="relative">
       {/* Camera view or captured image */}
-      <div className="relative flex-1 bg-black">
+      {/* 初期コード: aspect-[4/3] → 変更: h-[calc(100svh-100px)] で画面の大部分を使用 */}
+      <div className="relative h-[calc(100svh-100px)] bg-black">
         {capturedImage ? (
           <img
             src={capturedImage}
@@ -79,7 +78,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
               videoConstraints={videoConstraints}
               onUserMedia={() => setIsLoading(false)}
               onUserMediaError={() => setIsLoading(false)}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -91,7 +90,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       </div>
 
       {/* Controls */}
-      <div className="p-4 flex items-center justify-center gap-4 bg-black/80 safe-area-bottom">
+      <div className="p-4 flex items-center justify-center gap-4">
         {capturedImage ? (
           <>
             <Button
