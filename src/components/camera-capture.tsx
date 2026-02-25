@@ -60,8 +60,8 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   return (
     <div className="relative">
       {/* Camera view or captured image */}
-      {/* 初期コード: aspect-[4/3] → 変更: h-[calc(100svh-100px)] で画面の大部分を使用 */}
-      <div className="relative h-[calc(100svh-100px)] bg-black">
+      {/* 初期コード: aspect-[4/3] → 変更: h-[calc(100svh-180px)] で画面の大部分を使用 */}
+      <div className="relative h-[calc(100svh-180px)] bg-black">
         {capturedImage ? (
           <img
             src={capturedImage}
