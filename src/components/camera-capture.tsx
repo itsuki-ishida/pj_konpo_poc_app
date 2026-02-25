@@ -27,10 +27,10 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
     })
   }, [])
 
-  const videoConstraints = {
+  // 解像度を指定しないことで、デバイスが自動的に
+  // 縦向き/横向きに応じた適切な映像を選択する
+  const videoConstraints: MediaTrackConstraints = {
     facingMode,
-    width: { min: 1920, ideal: 3840 },
-    height: { min: 1080, ideal: 2160 },
   }
 
   const handleCapture = () => {
