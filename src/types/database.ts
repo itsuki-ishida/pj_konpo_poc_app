@@ -36,6 +36,7 @@ export interface Database {
           predicted_size: string
           fill_rate: number
           type: string
+          recorder: string | null
           poc_packing_size: string | null
           memo: string | null
           created_at: string
@@ -50,6 +51,7 @@ export interface Database {
           predicted_size: string
           fill_rate: number
           type: string
+          recorder?: string | null
           poc_packing_size?: string | null
           memo?: string | null
           created_at?: string
@@ -64,6 +66,7 @@ export interface Database {
           predicted_size?: string
           fill_rate?: number
           type?: string
+          recorder?: string | null
           poc_packing_size?: string | null
           memo?: string | null
           created_at?: string

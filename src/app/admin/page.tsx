@@ -19,7 +19,6 @@ import {
   Loader2,
   Search,
   RefreshCw,
-  ExternalLink,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
@@ -38,6 +37,7 @@ interface ExportRow {
   充填率: string
   箱実績: string
   箱予想: string
+  記入者: string
   PoC梱包サイズ: string
   メモ: string
   [key: string]: string | number // For dynamic image columns
@@ -165,6 +165,7 @@ export default function AdminPage() {
             充填率: (order.fill_rate * 100).toFixed(2) + "%",
             箱実績: order.actual_size,
             箱予想: order.predicted_size,
+            記入者: order.recorder || "",
             PoC梱包サイズ: order.poc_packing_size || "",
             メモ: order.memo || "",
           }
@@ -192,6 +193,7 @@ export default function AdminPage() {
         { wch: 10 }, // 充填率
         { wch: 12 }, // 箱実績
         { wch: 12 }, // 箱予想
+        { wch: 12 }, // 記入者
         { wch: 15 }, // PoC梱包サイズ
         { wch: 30 }, // メモ
       ]
@@ -328,6 +330,7 @@ export default function AdminPage() {
                       <th className="p-3 text-left whitespace-nowrap">充填率</th>
                       <th className="p-3 text-left whitespace-nowrap">箱実績</th>
                       <th className="p-3 text-left whitespace-nowrap">箱予想</th>
+                      <th className="p-3 text-left whitespace-nowrap">記入者</th>
                       <th className="p-3 text-left whitespace-nowrap">
                         PoC梱包
                       </th>
@@ -371,6 +374,9 @@ export default function AdminPage() {
                           {order.predicted_size}
                         </td>
                         <td className="p-3 whitespace-nowrap">
+                          {order.recorder || "-"}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
                           <span
                             className={
                               order.poc_packing_size
@@ -389,17 +395,17 @@ export default function AdminPage() {
                         <td className="p-3 whitespace-nowrap">
                           {order.images.length > 0 ? (
                             <div className="flex items-center gap-1">
-                              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                {order.images.length}枚
-                              </span>
-                              <a
-                                href={order.images[0].url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
+                              {order.images.map((image, index) => (
+                                <a
+                                  key={image.id}
+                                  href={image.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded hover:bg-primary/20"
+                                >
+                                  {index + 1}
+                                </a>
+                              ))}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>

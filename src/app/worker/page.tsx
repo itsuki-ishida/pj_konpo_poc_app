@@ -77,6 +77,7 @@ export default function WorkerPage() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
   const [isCameraOpen, setIsCameraOpen] = React.useState(false)
+  const [recorder, setRecorder] = React.useState<string>("")
   const [pocPackingSize, setPocPackingSize] = React.useState<string>("")
   const [memo, setMemo] = React.useState("")
   const [originalMemo, setOriginalMemo] = React.useState("")
@@ -162,6 +163,7 @@ export default function WorkerPage() {
       }
 
       setOrder(orderData as OrderWithDetails)
+      setRecorder(orderData.recorder || "")
       setPocPackingSize(orderData.poc_packing_size || "")
       setMemo(orderData.memo || "")
       setOriginalMemo(orderData.memo || "")
@@ -208,6 +210,34 @@ export default function WorkerPage() {
       toast({
         title: "エラー",
         description: "チェック状態の更新に失敗しました",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleRecorderSave = async () => {
+    if (!order) return
+
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ recorder })
+        .eq("id", order.id)
+
+      if (error) throw error
+
+      setOrder((prev) => prev ? { ...prev, recorder } : null)
+
+      toast({
+        title: "保存しました",
+        description: "記入者を更新しました",
+        variant: "success",
+      })
+    } catch (error) {
+      console.error("Save error:", error)
+      toast({
+        title: "保存エラー",
+        description: "記入者の更新に失敗しました",
         variant: "destructive",
       })
     }
@@ -529,6 +559,30 @@ export default function WorkerPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recorder */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">記入者</CardTitle>
+              <CardDescription>
+                作業担当者の名前を入力してください
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="記入者名"
+                  value={recorder}
+                  onChange={(e) => setRecorder(e.target.value)}
+                  className="flex-1"
+                />
+                <Button onClick={handleRecorderSave}>
+                  <Save className="h-4 w-4 mr-2" />
+                  保存
+                </Button>
               </div>
             </CardContent>
           </Card>

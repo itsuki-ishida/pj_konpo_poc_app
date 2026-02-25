@@ -28,8 +28,8 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   }, [])
 
   const videoConstraints = {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
+    width: { ideal: 3840 },
+    height: { ideal: 2160 },
     facingMode,
   }
 
@@ -57,9 +57,9 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   }
 
   return (
-    <div className="relative">
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Camera view or captured image */}
-      <div className="relative aspect-[4/3] bg-black">
+      <div className="relative flex-1 bg-black">
         {capturedImage ? (
           <img
             src={capturedImage}
@@ -72,10 +72,11 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
               ref={webcamRef}
               audio={false}
               screenshotFormat="image/jpeg"
+              screenshotQuality={1}
               videoConstraints={videoConstraints}
               onUserMedia={() => setIsLoading(false)}
               onUserMediaError={() => setIsLoading(false)}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover"
             />
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -87,7 +88,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
       </div>
 
       {/* Controls */}
-      <div className="p-4 flex items-center justify-center gap-4">
+      <div className="p-4 flex items-center justify-center gap-4 bg-black/80 safe-area-bottom">
         {capturedImage ? (
           <>
             <Button
