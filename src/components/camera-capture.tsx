@@ -29,6 +29,8 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
   const videoConstraints = {
     facingMode,
+    width: { min: 1920, ideal: 3840 },
+    height: { min: 1080, ideal: 2160 },
   }
 
   const handleCapture = () => {
