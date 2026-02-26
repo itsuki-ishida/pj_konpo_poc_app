@@ -545,6 +545,11 @@ export default function WorkerPage() {
                           <span className="text-sm font-medium">
                             x{product.quantity}
                           </span>
+                          {product.category && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              {product.category}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {product.product_name}

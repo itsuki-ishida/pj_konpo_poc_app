@@ -79,6 +79,7 @@ export interface Database {
           order_id: string
           product_code: string
           product_name: string
+          category: string | null
           quantity: number
           lx: number
           ly: number
@@ -91,6 +92,7 @@ export interface Database {
           order_id: string
           product_code: string
           product_name: string
+          category?: string | null
           quantity: number
           lx: number
           ly: number
@@ -103,6 +105,7 @@ export interface Database {
           order_id?: string
           product_code?: string
           product_name?: string
+          category?: string | null
           quantity?: number
           lx?: number
           ly?: number
