@@ -20,6 +20,7 @@ interface CSVRow {
   注文番号: string
   商品コード: string
   商品名: string
+  カテゴリ: string
   数量: string
   種別: string
   "適用サイズ_実績": string
@@ -145,6 +146,7 @@ export default function DataRegistrationPage() {
                 order_id: order.id,
                 product_code: row.商品コード || "",
                 product_name: row.商品名 || "",
+                category: row.カテゴリ || null,
                 quantity: parseInt(row.数量) || 0,
                 lx: parseInt(row.lx) || 0,
                 ly: parseInt(row.ly) || 0,
@@ -296,6 +298,7 @@ export default function DataRegistrationPage() {
                         <th className="p-2 text-left whitespace-nowrap">注文番号</th>
                         <th className="p-2 text-left whitespace-nowrap">商品コード</th>
                         <th className="p-2 text-left whitespace-nowrap">商品名</th>
+                        <th className="p-2 text-left whitespace-nowrap">カテゴリ</th>
                         <th className="p-2 text-left whitespace-nowrap">数量</th>
                         <th className="p-2 text-left whitespace-nowrap">種別</th>
                         <th className="p-2 text-left whitespace-nowrap">実績</th>
@@ -310,6 +313,7 @@ export default function DataRegistrationPage() {
                           <td className="p-2 whitespace-nowrap max-w-[150px] truncate">
                             {row.商品名}
                           </td>
+                          <td className="p-2 whitespace-nowrap">{row.カテゴリ}</td>
                           <td className="p-2 whitespace-nowrap">{row.数量}</td>
                           <td className="p-2 whitespace-nowrap">{row.種別}</td>
                           <td className="p-2 whitespace-nowrap">{row["適用サイズ_実績"]}</td>
@@ -399,7 +403,7 @@ export default function DataRegistrationPage() {
             </p>
             <div className="bg-muted p-3 rounded-lg overflow-x-auto">
               <code className="text-xs whitespace-nowrap">
-                注文番号,商品コード,商品名,数量,種別,適用サイズ_実績,適用サイズ_予測,総数量,充填率,lx,ly,lz
+                注文番号,商品コード,商品名,カテゴリ,数量,種別,適用サイズ_実績,適用サイズ_予測,総数量,充填率,lx,ly,lz
               </code>
             </div>
           </CardContent>
