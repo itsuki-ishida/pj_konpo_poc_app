@@ -119,18 +119,21 @@ export interface Database {
           id: string
           order_id: string
           url: string
+          image_type: 'actual' | 'predicted'
           created_at: string
         }
         Insert: {
           id?: string
           order_id: string
           url: string
+          image_type: 'actual' | 'predicted'
           created_at?: string
         }
         Update: {
           id?: string
           order_id?: string
           url?: string
+          image_type?: 'actual' | 'predicted'
           created_at?: string
         }
       }

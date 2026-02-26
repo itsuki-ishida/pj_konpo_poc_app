@@ -76,7 +76,7 @@ export default function WorkerPage() {
   const [order, setOrder] = React.useState<OrderWithDetails | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
-  const [isCameraOpen, setIsCameraOpen] = React.useState(false)
+  const [currentCameraType, setCurrentCameraType] = React.useState<'actual' | 'predicted' | null>(null)
   const [recorder, setRecorder] = React.useState<string>("")
   const [pocPackingSize, setPocPackingSize] = React.useState<string>("")
   const [memo, setMemo] = React.useState("")
@@ -305,15 +305,15 @@ export default function WorkerPage() {
   }
 
   const handleImageCapture = async (imageDataUrl: string) => {
-    if (!order) return
+    if (!order || !currentCameraType) return
 
     try {
       // Convert data URL to blob
       const response = await fetch(imageDataUrl)
       const blob = await response.blob()
 
-      // Generate unique filename
-      const filename = `${order.order_number}/${Date.now()}.jpg`
+      // Generate unique filename with type prefix
+      const filename = `${order.order_number}/${currentCameraType}_${Date.now()}.jpg`
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -329,12 +329,13 @@ export default function WorkerPage() {
         .from("order-images")
         .getPublicUrl(filename)
 
-      // Save image record to database
+      // Save image record to database with image_type
       const { data: imageRecord, error: dbError } = await supabase
         .from("images")
         .insert({
           order_id: order.id,
           url: urlData.publicUrl,
+          image_type: currentCameraType,
         })
         .select()
         .single()
@@ -351,10 +352,10 @@ export default function WorkerPage() {
           : null
       )
 
-      setIsCameraOpen(false)
+      setCurrentCameraType(null)
       toast({
         title: "保存しました",
-        description: "画像をアップロードしました",
+        description: `${currentCameraType === 'actual' ? '実績箱' : '予測箱'}の画像をアップロードしました`,
         variant: "success",
       })
     } catch (error) {
@@ -619,35 +620,80 @@ export default function WorkerPage() {
             </CardContent>
           </Card>
 
-          {/* Images */}
+          {/* Images - Actual Box */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <ImageIcon className="h-5 w-5" />
-                画像記録
+                写真（実績箱）
               </CardTitle>
               <CardDescription>
-                梱包状態の写真を撮影・保存できます
+                実績箱での梱包状態の写真を撮影・保存できます
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <Button
-                  onClick={() => setIsCameraOpen(true)}
+                  onClick={() => setCurrentCameraType('actual')}
                   variant="outline"
                   className="w-full"
                 >
                   <Camera className="h-4 w-4 mr-2" />
-                  カメラで撮影
+                  実績箱を撮影
                 </Button>
 
-                {order.images.length > 0 && (
+                {order.images.filter(img => img.image_type === 'actual').length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {order.images.map((image) => (
+                    {order.images.filter(img => img.image_type === 'actual').map((image) => (
                       <div key={image.id} className="relative group">
                         <img
                           src={image.url}
-                          alt="梱包画像"
+                          alt="実績箱画像"
+                          className="w-full aspect-square object-cover rounded-lg border"
+                        />
+                        <button
+                          onClick={() => setDeleteImageId(image.id)}
+                          className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Images - Predicted Box */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                写真（予測箱）
+              </CardTitle>
+              <CardDescription>
+                予測箱での梱包状態の写真を撮影・保存できます
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Button
+                  onClick={() => setCurrentCameraType('predicted')}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  予測箱を撮影
+                </Button>
+
+                {order.images.filter(img => img.image_type === 'predicted').length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {order.images.filter(img => img.image_type === 'predicted').map((image) => (
+                      <div key={image.id} className="relative group">
+                        <img
+                          src={image.url}
+                          alt="予測箱画像"
                           className="w-full aspect-square object-cover rounded-lg border"
                         />
                         <button
@@ -704,17 +750,19 @@ export default function WorkerPage() {
       )}
 
       {/* Camera dialog */}
-      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+      <Dialog open={!!currentCameraType} onOpenChange={(open) => !open && setCurrentCameraType(null)}>
         <DialogContent className="max-w-lg p-0 overflow-hidden">
           <DialogHeader className="p-4 pb-0">
-            <DialogTitle>写真撮影</DialogTitle>
+            <DialogTitle>
+              {currentCameraType === 'actual' ? '実績箱の撮影' : '予測箱の撮影'}
+            </DialogTitle>
             <DialogDescription>
-              梱包状態を撮影してください
+              {currentCameraType === 'actual' ? '実績箱' : '予測箱'}の梱包状態を撮影してください
             </DialogDescription>
           </DialogHeader>
           <CameraCapture
             onCapture={handleImageCapture}
-            onClose={() => setIsCameraOpen(false)}
+            onClose={() => setCurrentCameraType(null)}
           />
         </DialogContent>
       </Dialog>

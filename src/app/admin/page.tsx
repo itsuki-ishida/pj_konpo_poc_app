@@ -142,18 +142,23 @@ export default function AdminPage() {
 
       if (error) throw error
 
-      // Find max number of images
-      let maxImages = 0
+      // Find max number of images by type
+      let maxActualImages = 0
+      let maxPredictedImages = 0
       const typedOrders = allOrders as OrderWithDetails[]
       typedOrders?.forEach((order) => {
-        if (order.images && order.images.length > maxImages) {
-          maxImages = order.images.length
-        }
+        const actualCount = order.images?.filter(img => img.image_type === 'actual').length || 0
+        const predictedCount = order.images?.filter(img => img.image_type === 'predicted').length || 0
+        if (actualCount > maxActualImages) maxActualImages = actualCount
+        if (predictedCount > maxPredictedImages) maxPredictedImages = predictedCount
       })
 
       // Transform data for export
       const exportData: ExportRow[] = typedOrders.map(
         (order) => {
+          const actualImages = order.images?.filter(img => img.image_type === 'actual') || []
+          const predictedImages = order.images?.filter(img => img.image_type === 'predicted') || []
+
           const row: ExportRow = {
             注文番号: order.order_number,
             商品コードリスト: order.products
@@ -170,9 +175,14 @@ export default function AdminPage() {
             メモ: order.memo || "",
           }
 
-          // Add image URLs
-          for (let i = 0; i < maxImages; i++) {
-            row[`画像${i + 1}`] = order.images[i]?.url || ""
+          // Add actual box image URLs
+          for (let i = 0; i < maxActualImages; i++) {
+            row[`実績箱画像${i + 1}`] = actualImages[i]?.url || ""
+          }
+
+          // Add predicted box image URLs
+          for (let i = 0; i < maxPredictedImages; i++) {
+            row[`予測箱画像${i + 1}`] = predictedImages[i]?.url || ""
           }
 
           return row
@@ -197,8 +207,12 @@ export default function AdminPage() {
         { wch: 15 }, // PoC梱包サイズ
         { wch: 30 }, // メモ
       ]
-      // Add image column widths
-      for (let i = 0; i < maxImages; i++) {
+      // Add actual box image column widths
+      for (let i = 0; i < maxActualImages; i++) {
+        colWidths.push({ wch: 50 })
+      }
+      // Add predicted box image column widths
+      for (let i = 0; i < maxPredictedImages; i++) {
         colWidths.push({ wch: 50 })
       }
       ws["!cols"] = colWidths
@@ -335,7 +349,8 @@ export default function AdminPage() {
                         PoC梱包
                       </th>
                       <th className="p-3 text-left whitespace-nowrap">メモ</th>
-                      <th className="p-3 text-left whitespace-nowrap">画像</th>
+                      <th className="p-3 text-left whitespace-nowrap">実績箱画像</th>
+                      <th className="p-3 text-left whitespace-nowrap">予測箱画像</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -393,15 +408,34 @@ export default function AdminPage() {
                           </div>
                         </td>
                         <td className="p-3 whitespace-nowrap">
-                          {order.images.length > 0 ? (
+                          {order.images.filter(img => img.image_type === 'actual').length > 0 ? (
                             <div className="flex items-center gap-1">
-                              {order.images.map((image, index) => (
+                              {order.images.filter(img => img.image_type === 'actual').map((image, index) => (
                                 <a
                                   key={image.id}
                                   href={image.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded hover:bg-primary/20"
+                                  className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded hover:bg-blue-200"
+                                >
+                                  {index + 1}
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {order.images.filter(img => img.image_type === 'predicted').length > 0 ? (
+                            <div className="flex items-center gap-1">
+                              {order.images.filter(img => img.image_type === 'predicted').map((image, index) => (
+                                <a
+                                  key={image.id}
+                                  href={image.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded hover:bg-green-200"
                                 >
                                   {index + 1}
                                 </a>
