@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { supabase } from "@/lib/supabase"
 import type { Dataset } from "@/types/database"
+import { FORMAT_SHORT_LABELS } from "@/lib/formats"
 import {
   Database,
   ClipboardList,
@@ -45,9 +46,16 @@ export function Sidebar({ className }: SidebarProps) {
     const saved = localStorage.getItem("selectedDataset")
     if (saved && datasets.some((d) => d.id === saved)) {
       setSelectedDataset(saved)
+      const dataset = datasets.find((d) => d.id === saved)
+      const formatVersion = dataset?.format_version || "v1"
+      localStorage.setItem("selectedDatasetFormat", formatVersion)
     } else if (datasets.length > 0) {
       setSelectedDataset(datasets[0].id)
       localStorage.setItem("selectedDataset", datasets[0].id)
+      localStorage.setItem(
+        "selectedDatasetFormat",
+        datasets[0].format_version || "v1"
+      )
     }
   }, [datasets])
 
@@ -71,8 +79,15 @@ export function Sidebar({ className }: SidebarProps) {
   const handleDatasetChange = (value: string) => {
     setSelectedDataset(value)
     localStorage.setItem("selectedDataset", value)
+    const dataset = datasets.find((d) => d.id === value)
+    const formatVersion = dataset?.format_version || "v1"
+    localStorage.setItem("selectedDatasetFormat", formatVersion)
     // Trigger a custom event to notify other components
-    window.dispatchEvent(new CustomEvent("datasetChanged", { detail: value }))
+    window.dispatchEvent(
+      new CustomEvent("datasetChanged", {
+        detail: { id: value, formatVersion },
+      })
+    )
   }
 
   const navItems = [
@@ -141,13 +156,38 @@ export function Sidebar({ className }: SidebarProps) {
                   <SelectValue placeholder="データセットを選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {datasets.map((dataset) => (
-                    <SelectItem key={dataset.id} value={dataset.id}>
-                      {dataset.name}
-                    </SelectItem>
-                  ))}
+                  {datasets.map((dataset) => {
+                    const version = dataset.format_version || "v1"
+                    return (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "text-[10px] font-medium px-1.5 py-0.5 rounded",
+                              version === "v2"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-blue-100 text-blue-700"
+                            )}
+                          >
+                            {FORMAT_SHORT_LABELS[version]}
+                          </span>
+                          <span>{dataset.name}</span>
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
+              {selectedDataset && (() => {
+                const current = datasets.find((d) => d.id === selectedDataset)
+                if (!current) return null
+                const version = current.format_version || "v1"
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    フォーマット: {FORMAT_SHORT_LABELS[version]}
+                  </p>
+                )
+              })()}
               {datasets.length === 0 && !isLoading && (
                 <p className="text-xs text-muted-foreground">
                   データセットがありません

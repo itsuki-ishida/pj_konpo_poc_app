@@ -39,7 +39,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import type { Order, Product, OrderImage } from "@/types/database"
+import type {
+  Order,
+  Product,
+  OrderImage,
+  OrderV2,
+  ProductV2,
+  OrderImageV2,
+  FormatVersion,
+  ImageTypeV1,
+  ImageTypeV2,
+} from "@/types/database"
 import {
   Search,
   Camera,
@@ -49,10 +59,13 @@ import {
   Box,
   Ruler,
   Trash2,
-  X,
   ImageIcon,
 } from "lucide-react"
 import { CameraCapture } from "@/components/camera-capture"
+import {
+  IMAGE_TYPE_V2_ORDER,
+  IMAGE_TYPE_V2_LABELS,
+} from "@/lib/formats"
 
 const PACKING_SIZES = [
   "ネコポス大",
@@ -64,43 +77,76 @@ const PACKING_SIZES = [
   "120サイズ",
 ]
 
-interface OrderWithDetails extends Order {
+interface OrderV1WithDetails extends Order {
   products: Product[]
   images: OrderImage[]
+}
+
+interface OrderV2WithDetails extends OrderV2 {
+  products: ProductV2[]
+  images: OrderImageV2[]
 }
 
 export default function WorkerPage() {
   const { toast } = useToast()
   const [selectedDataset, setSelectedDataset] = React.useState<string>("")
+  const [formatVersion, setFormatVersion] =
+    React.useState<FormatVersion>("v1")
   const [orderNumber, setOrderNumber] = React.useState("")
-  const [order, setOrder] = React.useState<OrderWithDetails | null>(null)
+  const [orderV1, setOrderV1] = React.useState<OrderV1WithDetails | null>(null)
+  const [orderV2, setOrderV2] = React.useState<OrderV2WithDetails | null>(null)
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSaving, setIsSaving] = React.useState(false)
-  const [currentCameraType, setCurrentCameraType] = React.useState<'actual' | 'predicted' | null>(null)
+  const [currentCameraTypeV1, setCurrentCameraTypeV1] =
+    React.useState<ImageTypeV1 | null>(null)
+  const [currentCameraTypeV2, setCurrentCameraTypeV2] =
+    React.useState<ImageTypeV2 | null>(null)
   const [recorder, setRecorder] = React.useState<string>("")
   const [pocPackingSize, setPocPackingSize] = React.useState<string>("")
   const [memo, setMemo] = React.useState("")
   const [originalMemo, setOriginalMemo] = React.useState("")
-  const [checkedProducts, setCheckedProducts] = React.useState<Set<string>>(new Set())
+  const [checkedProducts, setCheckedProducts] = React.useState<Set<string>>(
+    new Set()
+  )
   const [deleteImageId, setDeleteImageId] = React.useState<string | null>(null)
   const [hasUnsavedMemo, setHasUnsavedMemo] = React.useState(false)
 
-  // Load selected dataset from localStorage
+  const resetOrderState = () => {
+    setOrderV1(null)
+    setOrderV2(null)
+    setOrderNumber("")
+    setRecorder("")
+    setPocPackingSize("")
+    setMemo("")
+    setOriginalMemo("")
+    setCheckedProducts(new Set())
+  }
+
+  // Load selected dataset/format from localStorage
   React.useEffect(() => {
     const saved = localStorage.getItem("selectedDataset")
-    if (saved) {
-      setSelectedDataset(saved)
+    if (saved) setSelectedDataset(saved)
+    const savedFormat = localStorage.getItem("selectedDatasetFormat")
+    if (savedFormat === "v1" || savedFormat === "v2") {
+      setFormatVersion(savedFormat)
     }
 
     const handleDatasetChange = (e: CustomEvent) => {
-      setSelectedDataset(e.detail)
-      setOrder(null)
-      setOrderNumber("")
+      const detail = e.detail as { id: string; formatVersion: FormatVersion }
+      setSelectedDataset(detail.id)
+      setFormatVersion(detail.formatVersion || "v1")
+      resetOrderState()
     }
 
-    window.addEventListener("datasetChanged", handleDatasetChange as EventListener)
+    window.addEventListener(
+      "datasetChanged",
+      handleDatasetChange as EventListener
+    )
     return () => {
-      window.removeEventListener("datasetChanged", handleDatasetChange as EventListener)
+      window.removeEventListener(
+        "datasetChanged",
+        handleDatasetChange as EventListener
+      )
     }
   }, [])
 
@@ -124,6 +170,12 @@ export default function WorkerPage() {
     setHasUnsavedMemo(memo !== originalMemo)
   }, [memo, originalMemo])
 
+  const order = formatVersion === "v1" ? orderV1 : orderV2
+  const orderId = order?.id ?? null
+
+  // ==========================================================================
+  // 注文検索
+  // ==========================================================================
   const searchOrder = async () => {
     if (!selectedDataset || !orderNumber.trim()) {
       toast({
@@ -136,45 +188,77 @@ export default function WorkerPage() {
 
     setIsLoading(true)
     try {
-      // Fetch order with products and images
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          products (*),
-          images (*)
-        `)
-        .eq("dataset_id", selectedDataset)
-        .eq("order_number", orderNumber.trim())
-        .single()
+      if (formatVersion === "v1") {
+        const { data, error } = await supabase
+          .from("orders")
+          .select(`*, products (*), images (*)`)
+          .eq("dataset_id", selectedDataset)
+          .eq("order_number", orderNumber.trim())
+          .single()
 
-      if (orderError) {
-        if (orderError.code === "PGRST116") {
-          toast({
-            title: "注文が見つかりません",
-            description: `注文番号「${orderNumber}」は存在しません`,
-            variant: "destructive",
-          })
-        } else {
-          throw orderError
+        if (error) {
+          if (error.code === "PGRST116") {
+            toast({
+              title: "注文が見つかりません",
+              description: `注文番号「${orderNumber}」は存在しません`,
+              variant: "destructive",
+            })
+          } else {
+            throw error
+          }
+          setOrderV1(null)
+          return
         }
-        setOrder(null)
-        return
+
+        const v1 = data as OrderV1WithDetails
+        setOrderV1(v1)
+        setOrderV2(null)
+        setRecorder(v1.recorder || "")
+        setPocPackingSize(v1.poc_packing_size || "")
+        setMemo(v1.memo || "")
+        setOriginalMemo(v1.memo || "")
+
+        const checked = new Set<string>()
+        v1.products?.forEach((p) => {
+          if (p.is_checked) checked.add(p.id)
+        })
+        setCheckedProducts(checked)
+      } else {
+        const { data, error } = await supabase
+          .from("orders_v2")
+          .select(`*, products:products_v2 (*), images:images_v2 (*)`)
+          .eq("dataset_id", selectedDataset)
+          .eq("order_number", orderNumber.trim())
+          .single()
+
+        if (error) {
+          if (error.code === "PGRST116") {
+            toast({
+              title: "注文が見つかりません",
+              description: `注文番号「${orderNumber}」は存在しません`,
+              variant: "destructive",
+            })
+          } else {
+            throw error
+          }
+          setOrderV2(null)
+          return
+        }
+
+        const v2 = data as OrderV2WithDetails
+        setOrderV2(v2)
+        setOrderV1(null)
+        setRecorder(v2.recorder || "")
+        setPocPackingSize(v2.poc_packing_size || "")
+        setMemo(v2.memo || "")
+        setOriginalMemo(v2.memo || "")
+
+        const checked = new Set<string>()
+        v2.products?.forEach((p) => {
+          if (p.is_checked) checked.add(p.id)
+        })
+        setCheckedProducts(checked)
       }
-
-      setOrder(orderData as OrderWithDetails)
-      setRecorder(orderData.recorder || "")
-      setPocPackingSize(orderData.poc_packing_size || "")
-      setMemo(orderData.memo || "")
-      setOriginalMemo(orderData.memo || "")
-
-      // Set checked products
-      const checked = new Set<string>()
-      orderData.products?.forEach((p: Product) => {
-        if (p.is_checked) checked.add(p.id)
-      })
-      setCheckedProducts(checked)
-
     } catch (error) {
       console.error("Search error:", error)
       toast({
@@ -187,10 +271,14 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // 商品チェック
+  // ==========================================================================
   const handleProductCheck = async (productId: string, checked: boolean) => {
     try {
+      const table = formatVersion === "v1" ? "products" : "products_v2"
       const { error } = await supabase
-        .from("products")
+        .from(table)
         .update({ is_checked: checked })
         .eq("id", productId)
 
@@ -215,18 +303,26 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // 記入者保存
+  // ==========================================================================
   const handleRecorderSave = async () => {
-    if (!order) return
+    if (!orderId) return
 
     try {
+      const table = formatVersion === "v1" ? "orders" : "orders_v2"
       const { error } = await supabase
-        .from("orders")
+        .from(table)
         .update({ recorder })
-        .eq("id", order.id)
+        .eq("id", orderId)
 
       if (error) throw error
 
-      setOrder((prev) => prev ? { ...prev, recorder } : null)
+      if (formatVersion === "v1") {
+        setOrderV1((prev) => (prev ? { ...prev, recorder } : null))
+      } else {
+        setOrderV2((prev) => (prev ? { ...prev, recorder } : null))
+      }
 
       toast({
         title: "保存しました",
@@ -243,19 +339,31 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // PoC梱包サイズ
+  // ==========================================================================
   const handlePackingSizeChange = async (value: string) => {
-    if (!order) return
+    if (!orderId) return
 
     try {
+      const table = formatVersion === "v1" ? "orders" : "orders_v2"
       const { error } = await supabase
-        .from("orders")
+        .from(table)
         .update({ poc_packing_size: value })
-        .eq("id", order.id)
+        .eq("id", orderId)
 
       if (error) throw error
 
       setPocPackingSize(value)
-      setOrder((prev) => prev ? { ...prev, poc_packing_size: value } : null)
+      if (formatVersion === "v1") {
+        setOrderV1((prev) =>
+          prev ? { ...prev, poc_packing_size: value } : null
+        )
+      } else {
+        setOrderV2((prev) =>
+          prev ? { ...prev, poc_packing_size: value } : null
+        )
+      }
 
       toast({
         title: "保存しました",
@@ -272,20 +380,28 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // メモ
+  // ==========================================================================
   const handleMemoSave = async () => {
-    if (!order) return
+    if (!orderId) return
 
     setIsSaving(true)
     try {
+      const table = formatVersion === "v1" ? "orders" : "orders_v2"
       const { error } = await supabase
-        .from("orders")
+        .from(table)
         .update({ memo })
-        .eq("id", order.id)
+        .eq("id", orderId)
 
       if (error) throw error
 
       setOriginalMemo(memo)
-      setOrder((prev) => prev ? { ...prev, memo } : null)
+      if (formatVersion === "v1") {
+        setOrderV1((prev) => (prev ? { ...prev, memo } : null))
+      } else {
+        setOrderV2((prev) => (prev ? { ...prev, memo } : null))
+      }
 
       toast({
         title: "保存しました",
@@ -304,58 +420,70 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // 画像アップロード
+  // ==========================================================================
   const handleImageCapture = async (imageDataUrl: string) => {
-    if (!order || !currentCameraType) return
+    if (!orderId) return
+    const cameraType =
+      formatVersion === "v1" ? currentCameraTypeV1 : currentCameraTypeV2
+    if (!cameraType) return
 
     try {
-      // Convert data URL to blob
       const response = await fetch(imageDataUrl)
       const blob = await response.blob()
 
-      // Generate unique filename with type prefix
-      const filename = `${order.order_number}/${currentCameraType}_${Date.now()}.jpg`
+      const filename = `${order!.order_number}/${cameraType}_${Date.now()}.jpg`
 
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("order-images")
-        .upload(filename, blob, {
-          contentType: "image/jpeg",
-        })
+        .upload(filename, blob, { contentType: "image/jpeg" })
 
       if (uploadError) throw uploadError
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from("order-images")
         .getPublicUrl(filename)
 
-      // Save image record to database with image_type
+      const table = formatVersion === "v1" ? "images" : "images_v2"
       const { data: imageRecord, error: dbError } = await supabase
-        .from("images")
+        .from(table)
         .insert({
-          order_id: order.id,
+          order_id: orderId,
           url: urlData.publicUrl,
-          image_type: currentCameraType,
+          image_type: cameraType,
         })
         .select()
         .single()
 
       if (dbError) throw dbError
 
-      // Update local state
-      setOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              images: [...prev.images, imageRecord],
-            }
-          : null
-      )
+      if (formatVersion === "v1") {
+        setOrderV1((prev) =>
+          prev
+            ? { ...prev, images: [...prev.images, imageRecord as OrderImage] }
+            : null
+        )
+        setCurrentCameraTypeV1(null)
+      } else {
+        setOrderV2((prev) =>
+          prev
+            ? { ...prev, images: [...prev.images, imageRecord as OrderImageV2] }
+            : null
+        )
+        setCurrentCameraTypeV2(null)
+      }
 
-      setCurrentCameraType(null)
+      const label =
+        formatVersion === "v1"
+          ? cameraType === "actual"
+            ? "実績箱"
+            : "予測箱"
+          : IMAGE_TYPE_V2_LABELS[cameraType as ImageTypeV2]
+
       toast({
         title: "保存しました",
-        description: `${currentCameraType === 'actual' ? '実績箱' : '予測箱'}の画像をアップロードしました`,
+        description: `${label}の画像をアップロードしました`,
         variant: "success",
       })
     } catch (error) {
@@ -368,6 +496,9 @@ export default function WorkerPage() {
     }
   }
 
+  // ==========================================================================
+  // 画像削除
+  // ==========================================================================
   const handleImageDelete = async () => {
     if (!deleteImageId || !order) return
 
@@ -375,30 +506,38 @@ export default function WorkerPage() {
       const image = order.images.find((img) => img.id === deleteImageId)
       if (!image) return
 
-      // Extract filename from URL
       const urlParts = image.url.split("/")
       const filename = urlParts.slice(-2).join("/")
 
-      // Delete from storage
       await supabase.storage.from("order-images").remove([filename])
 
-      // Delete from database
+      const table = formatVersion === "v1" ? "images" : "images_v2"
       const { error } = await supabase
-        .from("images")
+        .from(table)
         .delete()
         .eq("id", deleteImageId)
 
       if (error) throw error
 
-      // Update local state
-      setOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              images: prev.images.filter((img) => img.id !== deleteImageId),
-            }
-          : null
-      )
+      if (formatVersion === "v1") {
+        setOrderV1((prev) =>
+          prev
+            ? {
+                ...prev,
+                images: prev.images.filter((img) => img.id !== deleteImageId),
+              }
+            : null
+        )
+      } else {
+        setOrderV2((prev) =>
+          prev
+            ? {
+                ...prev,
+                images: prev.images.filter((img) => img.id !== deleteImageId),
+              }
+            : null
+        )
+      }
 
       toast({
         title: "削除しました",
@@ -415,6 +554,141 @@ export default function WorkerPage() {
     } finally {
       setDeleteImageId(null)
     }
+  }
+
+  // ==========================================================================
+  // 描画ヘルパー
+  // ==========================================================================
+  const renderImagesSectionV1 = (type: ImageTypeV1, title: string) => {
+    if (!orderV1) return null
+    const images = orderV1.images.filter((img) => img.image_type === type)
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            写真（{title}）
+          </CardTitle>
+          <CardDescription>
+            {title}での梱包状態の写真を撮影・保存できます
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Button
+              onClick={() => setCurrentCameraTypeV1(type)}
+              variant="outline"
+              className="w-full"
+            >
+              <Camera className="h-4 w-4 mr-2" />
+              {title}を撮影
+            </Button>
+
+            {images.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {images.map((image) => (
+                  <div key={image.id} className="relative group">
+                    <img
+                      src={image.url}
+                      alt={`${title}画像`}
+                      className="w-full aspect-square object-cover rounded-lg border"
+                    />
+                    <button
+                      onClick={() => setDeleteImageId(image.id)}
+                      className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const renderImagesSectionV2 = (type: ImageTypeV2) => {
+    if (!orderV2) return null
+    const images = orderV2.images.filter((img) => img.image_type === type)
+    const title = IMAGE_TYPE_V2_LABELS[type]
+    return (
+      <Card key={type}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            写真（{title}）
+          </CardTitle>
+          <CardDescription>
+            {title}での梱包状態の写真を撮影・保存できます
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Button
+              onClick={() => setCurrentCameraTypeV2(type)}
+              variant="outline"
+              className="w-full"
+            >
+              <Camera className="h-4 w-4 mr-2" />
+              {title}を撮影
+            </Button>
+
+            {images.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {images.map((image) => (
+                  <div key={image.id} className="relative group">
+                    <img
+                      src={image.url}
+                      alt={`${title}画像`}
+                      className="w-full aspect-square object-cover rounded-lg border"
+                    />
+                    <button
+                      onClick={() => setDeleteImageId(image.id)}
+                      className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const products =
+    formatVersion === "v1" ? orderV1?.products : orderV2?.products
+
+  const cameraDialogOpen =
+    formatVersion === "v1"
+      ? !!currentCameraTypeV1
+      : !!currentCameraTypeV2
+
+  const cameraDialogTitle =
+    formatVersion === "v1"
+      ? currentCameraTypeV1 === "actual"
+        ? "実績箱の撮影"
+        : "予測箱の撮影"
+      : currentCameraTypeV2
+      ? `${IMAGE_TYPE_V2_LABELS[currentCameraTypeV2]}の撮影`
+      : ""
+
+  const cameraDialogDescription =
+    formatVersion === "v1"
+      ? currentCameraTypeV1 === "actual"
+        ? "実績箱の梱包状態を撮影してください"
+        : "予測箱の梱包状態を撮影してください"
+      : currentCameraTypeV2
+      ? `${IMAGE_TYPE_V2_LABELS[currentCameraTypeV2]}の梱包状態を撮影してください`
+      : ""
+
+  const closeCameraDialog = () => {
+    setCurrentCameraTypeV1(null)
+    setCurrentCameraTypeV2(null)
   }
 
   return (
@@ -474,36 +748,97 @@ export default function WorkerPage() {
               <CardDescription>注文番号: {order.order_number}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">総数量</Label>
-                  <p className="font-medium text-lg">{order.total_quantity}</p>
+              {formatVersion === "v1" && orderV1 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">総数量</Label>
+                    <p className="font-medium text-lg">
+                      {orderV1.total_quantity}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      適用サイズ(実績)
+                    </Label>
+                    <p className="font-medium">{orderV1.actual_size || "-"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      適用サイズ(予測)
+                    </Label>
+                    <p className="font-medium">
+                      {orderV1.predicted_size || "-"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      充填率(対予測)
+                    </Label>
+                    <p className="font-medium">
+                      {(orderV1.fill_rate * 100).toFixed(2)}%
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">種別</Label>
+                    <p className="font-medium">{orderV1.type || "-"}</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    適用サイズ(実績)
-                  </Label>
-                  <p className="font-medium">{order.actual_size || "-"}</p>
+              ) : orderV2 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        箱実績
+                      </Label>
+                      <p className="font-medium">
+                        {orderV2.actual_size || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        箱予想（GLPK）
+                      </Label>
+                      <p className="font-medium">
+                        {orderV2.predicted_size_glpk || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        箱予想（GA）
+                      </Label>
+                      <p className="font-medium">
+                        {orderV2.predicted_size_ga || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        箱予想（機械学習）
+                      </Label>
+                      <p className="font-medium">
+                        {orderV2.predicted_size_ml || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        箱予想（最終）
+                      </Label>
+                      <p className="font-medium text-emerald-700">
+                        {orderV2.predicted_size_final || "-"}
+                      </p>
+                    </div>
+                  </div>
+                  {orderV2.remarks && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        備考
+                      </Label>
+                      <p className="font-medium whitespace-pre-wrap text-sm bg-muted/50 p-2 rounded">
+                        {orderV2.remarks}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    適用サイズ(予測)
-                  </Label>
-                  <p className="font-medium">{order.predicted_size || "-"}</p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    充填率(対予測)
-                  </Label>
-                  <p className="font-medium">
-                    {(order.fill_rate * 100).toFixed(2)}%
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">種別</Label>
-                  <p className="font-medium">{order.type || "-"}</p>
-                </div>
-              </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -520,7 +855,7 @@ export default function WorkerPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {order.products.map((product) => (
+                {products?.map((product) => (
                   <div
                     key={product.id}
                     className={`p-3 rounded-lg border transition-colors ${
@@ -620,95 +955,15 @@ export default function WorkerPage() {
             </CardContent>
           </Card>
 
-          {/* Images - Actual Box */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                写真（実績箱）
-              </CardTitle>
-              <CardDescription>
-                実績箱での梱包状態の写真を撮影・保存できます
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Button
-                  onClick={() => setCurrentCameraType('actual')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  実績箱を撮影
-                </Button>
-
-                {order.images.filter(img => img.image_type === 'actual').length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {order.images.filter(img => img.image_type === 'actual').map((image) => (
-                      <div key={image.id} className="relative group">
-                        <img
-                          src={image.url}
-                          alt="実績箱画像"
-                          className="w-full aspect-square object-cover rounded-lg border"
-                        />
-                        <button
-                          onClick={() => setDeleteImageId(image.id)}
-                          className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Images - Predicted Box */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                写真（予測箱）
-              </CardTitle>
-              <CardDescription>
-                予測箱での梱包状態の写真を撮影・保存できます
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Button
-                  onClick={() => setCurrentCameraType('predicted')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  予測箱を撮影
-                </Button>
-
-                {order.images.filter(img => img.image_type === 'predicted').length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {order.images.filter(img => img.image_type === 'predicted').map((image) => (
-                      <div key={image.id} className="relative group">
-                        <img
-                          src={image.url}
-                          alt="予測箱画像"
-                          className="w-full aspect-square object-cover rounded-lg border"
-                        />
-                        <button
-                          onClick={() => setDeleteImageId(image.id)}
-                          className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Images */}
+          {formatVersion === "v1" ? (
+            <>
+              {renderImagesSectionV1("actual", "実績箱")}
+              {renderImagesSectionV1("predicted", "予測箱")}
+            </>
+          ) : (
+            IMAGE_TYPE_V2_ORDER.map((type) => renderImagesSectionV2(type))
+          )}
 
           {/* Memo */}
           <Card>
@@ -750,19 +1005,18 @@ export default function WorkerPage() {
       )}
 
       {/* Camera dialog */}
-      <Dialog open={!!currentCameraType} onOpenChange={(open) => !open && setCurrentCameraType(null)}>
+      <Dialog
+        open={cameraDialogOpen}
+        onOpenChange={(open) => !open && closeCameraDialog()}
+      >
         <DialogContent className="max-w-lg p-0 overflow-hidden">
           <DialogHeader className="p-4 pb-0">
-            <DialogTitle>
-              {currentCameraType === 'actual' ? '実績箱の撮影' : '予測箱の撮影'}
-            </DialogTitle>
-            <DialogDescription>
-              {currentCameraType === 'actual' ? '実績箱' : '予測箱'}の梱包状態を撮影してください
-            </DialogDescription>
+            <DialogTitle>{cameraDialogTitle}</DialogTitle>
+            <DialogDescription>{cameraDialogDescription}</DialogDescription>
           </DialogHeader>
           <CameraCapture
             onCapture={handleImageCapture}
-            onClose={() => setCurrentCameraType(null)}
+            onClose={closeCameraDialog}
           />
         </DialogContent>
       </Dialog>
